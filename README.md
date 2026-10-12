@@ -1,384 +1,275 @@
-# 🤖 AI Data Analyst Agent
+# InsightForge AI
 
-> **An LLM-Powered Conversational System for Automated Tabular Data Analysis**  
-> *Fully Migrated to Local Ollama for 100% Private, Offline LLM Communication*
+**A local, conversational AI data-analysis workspace — React + FastAPI + Ollama (Qwen3 4B).**
 
----
+InsightForge AI lets users upload CSV and Excel data, ask questions in natural language, inspect results calculated with Pandas, generate charts, and explore machine-learning operations through a modern three-column interface. It is built for local development and academic demonstrations, **not public multi-user deployment**.
 
-## 1. Project Overview
+> **Current branch:** `v4` · **Local model:** `qwen3:4b-instruct` · **Frontend:** React / TypeScript · **Backend:** FastAPI / Python
 
-The **AI Data Analyst Agent** is a full-stack, conversational data analytics application that enables non-technical users and analysts to upload tabular datasets (**CSV** or **Excel**) and query them using natural English.
+## V4 features
 
-Unlike conventional LLM wrappers that ask models to calculate mathematical figures directly (which leads to arithmetic hallucinations) or execute unverified LLM-generated code (which creates critical security risks), this application implements a **safe, decoupled architecture**:
-1. An **NLP Machine Learning Classifier** (`Scikit-Learn`) categorizes the query intent.
-2. An **LLM Query Planner** (`Ollama` local LLM via `qwen3:4b-instruct`) compiles the question into a structured JSON execution plan.
-3. A **Deterministic Analysis Engine** (`Pandas` & `NumPy`) calculates the verified numerical answer.
-4. An **Automated Visualization Engine** (`Matplotlib`) renders clean statistical plots.
-5. An interactive **Web Application** (`Gradio`) displays conversational answers, summary tables, and charts.
+| Workspace | What it does |
+| --- | --- |
+| **Overview** | Dataset summary and starting points for analysis |
+| **AI Analyst** | Chat-style questions, grounded analytical answers, follow-up context, and one-click suggested questions |
+| **Datasets** | Preview the active table, inspect columns and data quality, and export the current dataset |
+| **Visualization Studio** | View charts and data tables at a larger size, browse session results, and ask more questions using the same dataset |
+| **ML Studio** | Shortcuts to supported machine-learning operations in the existing analysis engine |
+| **Reports** | Access available exports; automatic PDF report creation is **not implemented** |
 
-All LLM communication is handled locally via **Ollama** (`http://localhost:11434`), eliminating all cloud API keys, recurring fees, and data privacy concerns.
+The desktop interface has a navigation/history sidebar on the left, chat in the center, and a compact upload, dataset-context, and chart dock on the right. Users can drag dividers to resize panels. Panels adapt to narrower windows to avoid horizontal **page** scrolling; the chart dock can be expanded, pinned, or hidden.
 
----
+### Upload, inspect and visualize
 
-## 2. Problem Statement
+- Browse or drag and drop **CSV, XLSX, XLS**, or a folder containing supported files.
+- Import up to **20 files per selection**, maximum **25 MB per file**.
+- Select one active dataset at a time; multiple imported datasets can be switched, but **cross-file joins are not supported**.
+- Inspect rows, columns, missing cells, duplicate rows, column names, data types and per-column missing values.
+- After uploading, **Download current data** exports the active table as CSV, including changes made by supported cleaning/transformation tasks. The user can also replace the imported files or folder.
+- Clicking a suggested quick question **submits it immediately**; an active dataset is required.
+- Clicking a chart/table result card opens that result in **Visualization Studio**, which has its own chat input and shares the analysis session.
+- Download generated charts as PNG images.
 
-Business users and students often struggle to write complex SQL queries or Pandas commands to extract simple insights from tabular files. While general-purpose LLMs can converse about data, standard implementations suffer from major drawbacks:
-1. **Arithmetic Hallucination**: LLMs predict text tokens; they do not perform arithmetic natively and frequently calculate incorrect averages, counts, or sums.
-2. **Arbitrary Code Execution Hazards**: Systems running raw LLM-generated Python scripts via `eval()` or `exec()` expose hosts to prompt injection and accidental file loss.
-3. **Data Privacy and API Costs**: Cloud LLM APIs require sending proprietary datasets to third-party cloud servers and incur usage billing.
+### Analytical capabilities
 
-**Solution**: This project bridges the gap by using a local Ollama LLM only for **linguistic understanding and structured planning**, while delegating all computational execution to deterministic Pandas and NumPy.
+The Python engine separates language understanding from numerical computation:
 
----
+1. `query_classifier.py` — scikit-learn intent classification.
+2. `query_planner.py` — natural-language question to a validated, whitelisted execution plan, with deterministic fallback.
+3. `analysis_engine.py` — statistics, filtering, grouping, cleaning, transformation, clustering and selected supervised-learning operations using Pandas, NumPy and scikit-learn.
+4. `visualization.py` — Matplotlib charts based on analytical results.
+5. `response_generator.py` — explanations grounded in the results, using Ollama when available.
 
-## 3. Project Objectives
+Supported tasks include summary statistics, missing-value analysis, sorting/filtering, group aggregation, encoding, scaling, correlations, K-Means, DBSCAN, classification, regression and PCA. The exact task available depends on the dataset and planner.
 
-* Enable seamless drag-and-drop upload for `.csv` and `.xlsx` files with instant schema profiling.
-* Perform automatic Exploratory Data Analysis (EDA): row/column counts, missing values, duplicate checks, and descriptive statistics.
-* Implement a supervised **Machine Learning Intent Classifier** (TF-IDF + Logistic Regression) evaluating precision, recall, and F1-score across 11 intent classes.
-* Translate free-form English queries into validated JSON execution plans using local **Ollama** models (`qwen3:4b-instruct`).
-* Safely compute 20 distinct tabular analytical tasks in Pandas without `eval()` or `exec()`.
-* Automatically generate publication-grade charts (bar charts, histograms, scatter plots, trend lines).
-* Maintain conversational context for follow-up questions (e.g. *"What is the maximum?"* after asking about salary).
-* Run 100% locally with zero cloud dependencies or external API keys.
+**Important:** The LLM helps interpret questions and generate safe plans; it is **not** trusted to execute arbitrary generated Python. Actual computations come from the analysis engine. AI-produced explanations should still be reviewed.
 
----
-
-## 4. Main Features & Complete KDD Workflow
-
-The system supports the full 5-stage **Knowledge Discovery in Databases (KDD)** methodology:
-
-### Stage 1: Selection & Data Inspection
-* **Column Selection**: Subsetting specific columns (`select_columns`).
-* **Condition Filtering**: Numerical and categorical filtering with multi-condition `AND` / `OR` logic (`filter`).
-* **Sampling & Slicing**: Random sampling (`sample_rows`) and range slicing (`slice_rows`).
-* **Ranking & Ordering**: Sorting ascending/descending, Top N (`top_n`), and Bottom N (`bottom_n`).
-* **Type-Based Selection**: Extracting all numerical, categorical, or datetime features.
-* **Metadata Detection**: Heuristic identification of potential Primary Key ID columns and candidate Target labels.
-
-### Stage 2: Preprocessing & Data Cleaning
-* **Missing Value Analysis**: Complete dataset breakdown and column-specific counts/percentages.
-* **Safe Imputation**: Mean, Median, Mode, Constant, Forward-Fill (`ffill`), and Backward-Fill (`bfill`).
-* **De-duplication**: Automatic duplicate row detection and removal (`drop_duplicates`).
-* **Text Normalization**: Leading/trailing whitespace trimming (`trim_whitespace`) and casing (`text_case`: lower, upper, title).
-* **Category Standardization**: Whitespace trimming with title-casing for consistent categorical values.
-* **Type Coercion with Reporting**: Converting strings to numbers (`to_numeric`) or datetimes (`to_datetime`) with invalid record logging.
-* **Outlier Handling**: IQR detection, outlier row filtering, and Winsorization/capping (`cap_outliers`).
-* **Infinite Value Handling**: Converting `+inf`/`-inf` to `NaN`.
-
-### Stage 3: Data Transformation
-* **Feature Scaling**: Min-Max Normalization $[0, 1]$, Z-Score Standardization (mean=0, std=1), and Robust Scaling (Median/IQR).
-* **Nonlinear Transforms**: Logarithmic transformation $\log(1 + x)$ for positive distributions.
-* **Discretization & Binning**: Equal-width interval binning and quantile-based binning (`bin_column`).
-* **Categorical Encoding**: Label encoding (`encode_category`) and One-Hot dummy encoding (`one_hot_encode`).
-* **Date Part Extraction**: Extracting year, month, day, and weekday from temporal columns.
-* **Column Arithmetic**: Safe derived columns (`create_derived_column`) and conditional indicators (`create_conditional_column`).
-* **Reshaping & Summaries**: Pivot tables and cross-tabulations (`crosstab`).
-
-### Stage 4: Data Mining
-* **Pattern Analysis**: Pearson and Spearman correlation matrices with ranking of top correlated pairs.
-* **Unsupervised Clustering**:
-  * **K-Means Clustering**: Multi-cluster grouping with centroid profiling and cluster sizing.
-  * **DBSCAN**: Density-based clustering with automatic noise-point identification.
-* **Supervised Learning**:
-  * **Classification**: Decision Trees and Logistic Regression with 80/20 train/test splits, computing Accuracy, Precision, Recall, F1-Score, and Confusion Matrices.
-  * **Regression**: Linear Regression with train/test validation, reporting MAE, RMSE, and $R^2$ scores.
-* **Dimensionality Reduction**: Principal Component Analysis (PCA) 2D projection with explained variance ratios.
-
-### Stage 5: Interpretation & Presentation
-* **Plain English Insights**: Evidence-grounded conversational answers generated with zero numeric hallucination.
-* **Automated Visualizations**: Matplotlib plots automatically chosen: Bar charts, Box plots, Histograms, Scatter plots, Line charts, Pie charts, Correlation heatmaps, Cluster scatters, Confusion matrices, Actual vs. Predicted plots, and PCA projections.
-* **Modified Data Export**: One-click download button directly below the Ask button to export cleaned and transformed CSV datasets.
-
----
-
-## 5. Technology Stack
-
-| Category | Technology / Library | Purpose in Project |
-| :--- | :--- | :--- |
-| **Language** | Python 3.10+ | Core development language |
-| **Data Processing** | `pandas` (>=2.2.0) | High-performance DataFrame operations |
-| **Numerical Math** | `numpy` (>=1.26.0) | Numerical statistics and vector computations |
-| **Excel Parser** | `openpyxl` (>=3.1.2) | Reading `.xlsx` workbook formats |
-| **Machine Learning** | `scikit-learn` (>=1.4.0) | Intent classifier, K-Means, DBSCAN, PCA, Decision Tree, Logistic Regression, Linear Regression |
-| **Visualization** | `matplotlib` (>=3.8.0) | Clean figure rendering using server-safe `Agg` backend |
-| **Web Interface** | `gradio` (>=4.20.0) | Reactive web UI with chat, tables, and plot rendering |
-| **Environment Mgmt** | `python-dotenv` (>=1.0.1) | Environment variable management via `.env` |
-| **LLM Communication** | `requests` (>=2.31.0) | HTTP REST communication with local Ollama daemon (`/api/chat`, `/api/tags`) |
-| **Local LLM Engine** | **Ollama** | Local LLM server running `qwen3:4b-instruct` on `http://localhost:11434` |
-
----
-
-## 11. How to Run the Automated Test Suite
-
-The project includes **99 comprehensive automated unit tests** covering all modules:
-
-```powershell
-# Run the entire test suite (99 tests):
-python -m unittest discover -s tests
-
-# Or run individual test suites:
-python -m unittest tests/test_kdd_full_operations.py
-python -m unittest tests/test_analysis_engine.py
-python -m unittest tests/test_query_planner.py
-python -m unittest tests/test_data_profiler.py
-python -m unittest tests/test_security_safeguards.py
-```
-
-*Note: All Ollama unit tests in `test_llm_client.py` use mocked HTTP responses and do not require a running Ollama server to execute.*
-
----
-
-## 12. Empirical Evaluation & Benchmark Results
-
-Run the full evaluation benchmark:
-```powershell
-python evaluation.py
-```
-
-### Benchmark Summary (Measured from 17 Ground-Truth Test Cases):
-* **Total Test Cases**: 17
-* **Supported Analytical Queries**: 16
-* **Analytical Correctness**: **100.0%** (16/16 verified ground-truth matches)
-* **Execution Success Rate**: **100.0%**
-* **Out-of-Scope Safety Rejection**: **PASS** (Unsupported queries safely handled)
-* **ML Classifier Test Accuracy**: **85.71%** (Macro F1: 0.8545)
-* **Average Response Latency**: ~355 ms
-
----
-
-## 6. System Architecture
+## System architecture
 
 ```text
-               [ User Uploads CSV/Excel & Types Query in English ]
-                                        │
-                                        ▼
-                   ┌─────────────────────────────────────────┐
-                   │        Gradio Web User Interface        │
-                   │                (app.py)                 │
-                   └────────────────────┬────────────────────┘
-                                        │
-            ┌───────────────────────────┴───────────────────────────┐
-            ▼                                                       ▼
-┌──────────────────────────────┐                         ┌───────────────────────┐
-│   Supervised ML Classifier   │                         │   LLM Query Planner   │
-│    (query_classifier.py)     │                         │  (query_planner.py)   │
-│   TF-IDF + Logistic Reg.     │                         │           │           │
-│  Predicts 1 of 11 intents    │                         │           ▼           │
-└──────────────┬───────────────┘                         │  Ollama Local LLM     │
-               │                                         │    (llm_client.py)    │
-               │ (Visual Badge)                          │  Strict JSON Planning │
-               │                                         └───────────┬───────────┘
-               │                                                     │
-               │                                                     ▼
-               │                                         ┌───────────────────────┐
-               │                                         │  Plan Safety Checker  │
-               │                                         │ Schema & type checks  │
-               │                                         └───────────┬───────────┘
-               │                                                     │
-               │                                                     ▼
-               │                                         ┌───────────────────────┐
-               │                                         │    Analysis Engine    │
-               │                                         │ (analysis_engine.py)  │
-               │                                         │  Pandas computations  │
-               │                                         └─────┬───────────┬─────┘
-               │                                               │           │
-               │                        ┌──────────────────────┘           └──────────────────────┐
-               │                        ▼                                                         ▼
-               │          ┌───────────────────────────┐                             ┌───────────────────────────┐
-               │          │    Response Generator     │                             │    Visualization Engine   │
-               │          │  (response_generator.py)  │                             │    (visualization.py)     │
-               │          │  Ollama explains result   │                             │ Generates Matplotlib plot │
-               │          └─────────────┬─────────────┘                             └─────────────┬─────────────┘
-               │                        │                                                         │
-               └────────────────────────┼─────────────────────────────────────────────────────────┘
-                                        ▼
-                          [ Render Answer & Plot in UI ]
+Browser (http://127.0.0.1:5173)
+  React + TypeScript + Vite
+        |  /api via Vite development proxy
+        v
+FastAPI (http://127.0.0.1:8000)
+  insightforge_api.py
+    |-- Upload and in-memory session state
+    |-- Data loader and profiler
+    |-- Query planner <---- Ollama / Qwen3 4B (localhost:11434)
+    |-- Pandas / NumPy / scikit-learn analysis engine
+    |-- Response generator
+    '-- Matplotlib ---> PNG chart / result table
 ```
 
----
+The original **Gradio** app (`app.py`) remains as an optional legacy interface. **V4's primary interface is React, not Gradio.**
 
-## 7. Project Folder Structure
+## Technology stack
+
+| Layer | Technologies |
+| --- | --- |
+| Frontend | React 19, TypeScript, Vite 6, Lucide React, react-markdown |
+| API | FastAPI, Uvicorn, Pydantic, python-multipart |
+| Local LLM | Ollama + `qwen3:4b-instruct` |
+| Analysis | Python, Pandas, NumPy, scikit-learn |
+| Charts | Matplotlib-generated images |
+| Excel parsing | openpyxl (`.xlsx`), xlrd (`.xls`) |
+| Legacy interface | Gradio (`app.py`, optional) |
+
+## Quick start — Windows PowerShell
+
+### Prerequisites
+
+- **Python 3.11** recommended for dependency compatibility.
+- **Node.js LTS** with `npm`.
+- **Ollama** installed and running locally, with the Qwen3 model downloaded.
+
+Clone V4 if this is your first setup:
+
+```powershell
+git clone --branch v4 https://github.com/chauhanyagnik34/Ai-Data-Analyst-Agent-ML-Project.git
+cd Ai-Data-Analyst-Agent-ML-Project
+```
+
+If you already have the repository:
+
+```powershell
+cd C:\Users\LOQ\Ai-Data-Analyst-Agent-ML-Project
+git switch v4
+```
+
+### 1. Python environment
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements-v4.txt
+```
+
+If a working `.venv` already exists, use it rather than recreating it. `requirements.txt` contains core analytics/legacy dependencies; `requirements-v4.txt` adds the API layer.
+
+### 2. Configure the local LLM
+
+```powershell
+ollama pull qwen3:4b-instruct
+Copy-Item .env.example .env
+```
+
+The `.env` configuration should be:
+
+```ini
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen3:4b-instruct
+```
+
+On Windows, Ollama usually runs from its desktop app. If it is not active, start that app or run `ollama serve` in another terminal. Check the connection:
+
+```powershell
+.\.venv\Scripts\python.exe llm_client.py
+```
+
+Look for `Configured: True` and a response from the model. The first call may take longer while Ollama loads it.
+
+### 3. Start the backend — Terminal 1
+
+From the repository root:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn insightforge_api:app --host 127.0.0.1 --port 8000 --reload
+```
+
+- API health: http://127.0.0.1:8000/api/health
+- Interactive API docs: http://127.0.0.1:8000/api/docs
+
+**Keep this terminal running.**
+
+### 4. Start the frontend — Terminal 2
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open **http://127.0.0.1:5173** in the browser. **Keep this terminal running, too.** Vite proxies `/api` to the Python server on port 8000.
+
+## How to use InsightForge
+
+1. Upload a dataset from the right-hand card or drag in a supported folder.
+2. Choose the active dataset if you imported multiple files.
+3. Use the **Overview** and **Columns** tabs to inspect the table and its fields.
+4. Ask questions such as **“What is the average salary?”**, **“Show missing values”**, or **“Compare average salary by department”**, using column names that actually exist in your data.
+5. Open any chart/table result in **Visualization Studio** and continue asking questions from the studio's chat box.
+6. Use **Download current data** to save the current table after analysis or supported transformations.
+
+The compact chart dock supports resizing, expanding, shrinking and pinning. Pinning keeps the selected visualization visible while new results are generated.
+
+## Local API routes
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/health` | Check the API and Ollama status |
+| `POST` | `/api/session` | Create an in-memory analysis session |
+| `GET` | `/api/session/{sid}` | Restore active dataset, chat and chart/table state |
+| `POST` | `/api/upload` | Import supported files using multipart upload |
+| `POST` | `/api/sample` | Load the bundled example dataset |
+| `POST` | `/api/select-dataset` | Change the active imported dataset |
+| `POST` | `/api/query` | Run a question against the active dataset |
+| `GET` | `/api/export/{sid}` | Download the active table as CSV |
+| `POST` | `/api/reset` | Clear session data |
+
+For exact request/response schemas, see **http://127.0.0.1:8000/api/docs**.
+
+## Repository structure
 
 ```text
 Ai-Data-Analyst-Agent-ML-Project/
-│
-├── app.py                      # Main web application (Gradio UI & orchestration)
-├── data_loader.py              # Secure CSV & Excel loader with format & size guards
-├── data_profiler.py            # Automated dataset profiling & descriptive statistics
-├── llm_client.py               # Centralized Ollama HTTP client (/api/chat, /api/tags)
-├── query_planner.py            # Converts natural language into validated JSON plans
-├── analysis_engine.py          # Deterministic Pandas engine executing 20 analytical tasks
-├── visualization.py            # Matplotlib figure generation (Bar, Line, Histogram, Scatter)
-├── query_classifier.py         # Supervised ML model (TF-IDF + Logistic Regression)
-├── response_generator.py       # Grounded conversational answer formulation via Ollama
-├── evaluation.py               # Empirical evaluation suite measuring correctness & latency
-│
-├── datasets/
-│   ├── sample_data.csv         # Benchmark employee dataset with mixed features & nulls
-│   └── sample_data.xlsx        # Excel workbook edition for format testing
-│
-├── tests/
-│   ├── test_data_loader.py            # 5 tests: CSV/Excel loading, metadata, file errors
-│   ├── test_data_profiler.py          # 6 tests: statistics, types, duplicate/null checks
-│   ├── test_analysis_engine.py        # 10 tests: analytical tasks, bounds, edge cases
-│   ├── test_llm_client.py             # 15 tests: Ollama status, chat, errors, timeouts, mocks
-│   ├── test_query_planner.py          # 5 tests: validation, heuristic planning, errors
-│   ├── test_visualization.py          # 6 tests: bar, line, scatter, histogram rendering
-│   ├── test_query_classifier.py       # 5 tests: model convergence, accuracy threshold
-│   ├── test_conversational_followup.py# 3 tests: multi-turn dialogue, context inheritance
-│   └── test_security_safeguards.py    # 4 tests: code injection, length limits, file types
-│
-├── evaluation_report.json      # Saved JSON report from evaluation benchmark
-├── .env                        # Local Ollama configuration (ignored by Git)
-├── .env.example                # Configuration template
-├── .gitignore                  # Git ignore rules for venv, cache, and local files
-├── requirements.txt            # Minimal pip dependencies
-└── README.md                   # Complete documentation and viva guide
+├── frontend/
+│   ├── src/
+│   │   ├── App.tsx              # Navigation, chat and visualization workspace
+│   │   ├── styles.css           # Responsive panels, theme, typography
+│   │   └── main.tsx             # React entry point
+│   ├── package.json
+│   └── vite.config.ts           # /api development proxy
+├── insightforge_api.py          # V4 FastAPI bridge
+├── requirements-v4.txt          # Additional API dependencies
+├── v4_smoke_test.py             # API smoke tests
+├── data_loader.py
+├── data_profiler.py
+├── query_classifier.py
+├── query_planner.py
+├── analysis_engine.py
+├── visualization.py
+├── response_generator.py
+├── llm_client.py                # Local Ollama HTTP client
+├── app.py                       # Legacy Gradio frontend (optional)
+├── requirements.txt            # Core Python dependencies
+├── .env.example                 # Local model configuration example
+├── datasets/                    # Sample datasets
+├── tests/                       # Python unit tests
+├── evaluation.py
+├── V4_SETUP.md                   # Additional setup details
+└── APPLY_V4_1.md                # V4 UI functionality update notes
 ```
 
----
+## Tests and checks
 
-## 8. Installation & Setup Instructions
-
-### Step 1: Install & Start Ollama
-1. Download and install Ollama from [ollama.com](https://ollama.com).
-2. Pull the default lightweight model:
-   ```bash
-   ollama pull qwen3:4b-instruct
-   ```
-3. Start the Ollama server (if not already running as a Windows background task):
-   ```bash
-   ollama serve
-   ```
-*(Note: On Windows, Ollama typically runs automatically as a system tray service at `http://localhost:11434`.)*
-
-### Step 2: Set Up Python Virtual Environment
-In a new terminal window:
-```powershell
-# Create virtual environment
-python -m venv .venv
-
-# Activate virtual environment on Windows PowerShell
-.venv\Scripts\Activate.ps1
-```
-*(If PowerShell restricts script execution, run: `Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned`)*
-
-### Step 3: Install Dependencies
-```powershell
-pip install -r requirements.txt
-```
-
-### Step 4: Configure Environment Variables
-Copy `.env.example` to `.env` (or edit existing `.env`):
-```ini
-# Ollama base URL (defaults to http://localhost:11434)
-OLLAMA_BASE_URL=http://localhost:11434
-
-# Ollama model name (default: qwen3:4b-instruct)
-OLLAMA_MODEL=qwen3:4b-instruct
-```
-*No cloud API keys are required!* If Ollama is not active, the system automatically uses the built-in deterministic heuristic planner so the app remains fully functional.
-
----
-
-## 9. How to Run the Application
-
-Start the local web application:
-```powershell
-python app.py
-```
-
-Open your browser and navigate to:
-```text
-http://127.0.0.1:7860
-```
-
-### Quick UI Tour:
-1. Click **"📊 Load Sample Employee Dataset"** (or upload your own CSV/Excel file).
-2. Expand **"📋 Dataset Profiling & Statistics"** to view descriptive statistics and missing values.
-3. Check the **LLM Status Badge**: Shows `🟢 LLM: Connected (Ollama - qwen3:4b-instruct)` or `🟡 Mode: Heuristic Fallback` with clear instructions.
-4. Use one-click prompts or ask questions in plain English:
-   * *"What is the average salary?"*
-   * *"Show average salary by department"*
-   * *"Top 3 employees by salary"*
-   * *"Show employees with salary greater than 70000"*
-   * *"Are there any missing values?"*
-   * *"What is the correlation between experience and salary?"*
-
----
-
-## 10. How to Train and Evaluate the ML Classifier
-
-To execute the standalone Machine Learning intent classification pipeline:
-```powershell
-python query_classifier.py
-```
-
-### Measured Performance Metrics:
-* **Algorithm**: Multiclass Logistic Regression (`solver='lbfgs'`, $C=5.0$)
-* **Feature Extraction**: TF-IDF Vectorizer with Unigrams and Bigrams (`ngram_range=(1, 2)`)
-* **Split Strategy**: Stratified Train/Test Split (75% train / 25% test, `random_state=42`)
-* **Overall Test Accuracy**: **85.71%**
-* **Macro F1-Score**: **0.8545**
-* **Weighted F1-Score**: **0.8643**
-
----
-
-## 11. How to Run the Automated Test Suite
-
-The project includes **59 comprehensive automated unit tests** covering all modules:
+Run these from the repository root after installing dependencies:
 
 ```powershell
-# Run the entire test suite:
-python -m unittest discover -s tests
-
-# Or run individual test modules:
-python -m unittest tests/test_llm_client.py
-python -m unittest tests/test_data_loader.py
-python -m unittest tests/test_analysis_engine.py
-python -m unittest tests/test_security_safeguards.py
+.\.venv\Scripts\python.exe -m unittest discover -s tests
+.\.venv\Scripts\python.exe v4_smoke_test.py
 ```
 
-*Note: All Ollama unit tests in `test_llm_client.py` use mocked HTTP responses and do not require a running Ollama server to execute.*
+The original test suite previously completed **111 tests successfully** in a local session following the Qwen3 configuration change. This is not a claim that CI or all V4 frontend interactions have been tested.
 
----
+For the React build check:
 
-## 12. Empirical Evaluation & Benchmark Results
-
-Run the full evaluation benchmark:
 ```powershell
-python evaluation.py
+cd frontend
+npm install
+npm run build
 ```
 
-### Benchmark Summary (Measured from 12 Ground-Truth Test Cases):
-* **Total Test Cases**: 12
-* **Supported Analytical Queries**: 11
-* **Analytical Correctness**: **100.0%** (11/11 verified numerical matches)
-* **Execution Success Rate**: **100.0%**
-* **Out-of-Scope Safety Rejection**: **PASS** (Unsupported queries safely handled)
+Manually verify real dataset upload, query execution, transformations and CSV export, result-card navigation, the Studio chat, and mouse-controlled panel resizing.
+
+## Current limitations
+
+- **Development-only API:** No authentication or production-grade multi-user security. Do **not** expose the local API to the public internet.
+- **Sessions stored in RAM:** Conversations and datasets survive a page refresh only while the Python server remains running. Restarting the backend loses them. The browser stores some preferences and chat titles, not uploaded data contents.
+- **One active dataset:** Multiple files can be imported, but the engine does not join data across files.
+- **Upload limits:** 25 MB per file and 20 files per upload. Unsupported formats are ignored or reported.
+- **Static visualizations:** Matplotlib returns PNG images. Panels can resize the images, but chart points are not yet interactively selectable as in Plotly.
+- **ML Studio scope:** Current UI offers shortcuts to supported engine operations. Dedicated AutoML and SHAP interfaces are future work.
+- **Reports scope:** CSV and chart export are supported; automatic PDF reports are not yet implemented.
+- **Data export:** Exports the current dataset to CSV; it does not overwrite the original Excel file.
+- **Ollama status:** Some deterministic analysis can still work when Ollama is offline, but model-based interpretation and phrasing may be unavailable or reduced.
+- **Local privacy:** The configured LLM runs locally, but users remain responsible for securing local files and devices.
+
+## Troubleshooting
+
+| Symptom | What to do |
+| --- | --- |
+| Browser cannot open port `5173` | Restart `npm run dev` inside `frontend` |
+| Frontend says backend unavailable | Start Uvicorn at `127.0.0.1:8000` from the repository root |
+| `/docs` shows 404 | Use V4's documented API route: `/api/docs` |
+| Ollama appears offline | Run `ollama ps`, verify `.env` and test `llm_client.py` |
+| `ModuleNotFoundError` | Install both Python requirements files into the same virtual environment |
+| `npm` is not recognized | Install Node.js LTS and restart PowerShell |
+| No chart appears | Ask a chart-producing question; verify the Python API is running |
+| Chat history disappears after API restart | Sessions are in server memory; persistence is not implemented |
+
+## Legacy Gradio app
+
+The earlier Gradio-based application is still available independently:
+
+```powershell
+.\.venv\Scripts\python.exe app.py
+```
+
+Its usual URL is **http://127.0.0.1:7860**. The primary V4 React frontend uses **http://127.0.0.1:5173**.
 
 ---
 
-## 13. System Limitations & Offline Processing
+**Repository:** [AI Data Analyst Agent](https://github.com/chauhanyagnik34/Ai-Data-Analyst-Agent-ML-Project) · [V4 branch](https://github.com/chauhanyagnik34/Ai-Data-Analyst-Agent-ML-Project/tree/v4)
 
-1. **Local Hardware Constraints**: Ollama runs on your local machine. Inference speed depends on your local CPU or GPU. Lightweight models such as `qwen3:4b-instruct` (3B) or `phi3` provide optimal performance on standard laptops.
-2. **Single-Table Scope**: The current release operates on single-table datasets. Multi-table relational joins (`JOIN` across multiple CSVs) are planned for a future release.
-3. **File Size Ceiling**: Uploads are restricted to 25 MB to maintain responsiveness in local memory.
-4. **Context Window**: Follow-up questions track recent conversational turns. Extensive multi-turn dialogues are pruned to prevent memory bloat.
-
----
-
-## 14. ML Viva Questions and Answers (Quick Revision)
-
-### Q1: Why did you migrate from cloud Gemini to local Ollama?
-> **Answer**: Local Ollama provides 100% privacy (data never leaves the host machine), eliminates external API key dependencies and billing quotas, enables offline classroom demonstrations, and ensures repeatable local evaluation.
-
-### Q2: Why did you use TF-IDF instead of simple Count Vectorizer?
-> **Answer**: Count Vectorizer gives disproportionate weight to frequent non-informative words (*"what"*, *"is"*). **TF-IDF** penalizes ubiquitous words and assigns higher weights to domain-specific analytical keywords (*"average"*, *"histogram"*, *"correlation"*).
-
-### Q3: Why can't we just ask the LLM to calculate mathematical answers directly?
-> **Answer**: LLMs are autoregressive token predictors trained on text. They do not contain arithmetic ALUs and frequently hallucinate numeric sums and averages. Delegating calculation to **Pandas and NumPy** guarantees 100% mathematical precision.
-
-### Q4: How did you safeguard the system against arbitrary code execution attacks?
-> **Answer**: We completely banned dynamic code execution functions (`eval()` and `exec()`). The Ollama LLM produces a structured JSON schema with whitelisted tasks (`mean`, `filter`, `top_n`, etc.). The **Analysis Engine** maps approved tasks to verified Pandas functions deterministically.
+*InsightForge AI V4 — local AI-assisted data analysis in a responsive three-column workspace.*
