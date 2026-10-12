@@ -1,0 +1,19 @@
+# Data processing and numerical calculations
+pandas>=2.2.0
+numpy>=1.26.0
+openpyxl>=3.1.2
+
+# Machine Learning and NLP for Intent Classifier
+scikit-learn>=1.4.0
+
+# Data Visualization
+matplotlib>=3.8.0
+
+# Web User Interface
+gradio>=4.20.0
+
+# Environment variables and configuration
+python-dotenv>=1.0.1
+
+# HTTP client for local Ollama API communication
+requests>=2.31.0

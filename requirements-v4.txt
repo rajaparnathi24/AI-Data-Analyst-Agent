@@ -1,0 +1,9 @@
+# Install requirements.txt first. This file adds the v4 local API layer.
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+python-multipart>=0.0.12
+# Used by the optional FastAPI smoke test
+httpx>=0.27,<1
+
+# Legacy .xls Excel support
+xlrd>=2.0.1,<3
